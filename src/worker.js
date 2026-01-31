@@ -20,6 +20,7 @@ app.use('/api/user/*', async (c, next) => {
     const JWT_SECRET = c.env.JWT_SECRET || 'secret_key';
     const authMiddleware = jwt({
         secret: JWT_SECRET,
+        alg: 'HS256',
     });
 
     // We want to extract userId from payload and put it in context

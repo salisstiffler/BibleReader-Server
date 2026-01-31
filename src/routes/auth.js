@@ -19,7 +19,7 @@ auth.post('/register', async (c) => {
         const info = await db.prepare('INSERT INTO users (username, password_hash) VALUES (?, ?)').bind(username, password_hash).run();
         const userId = info.meta.last_row_id;
 
-        const token = await sign({ userId }, JWT_SECRET);
+        const token = await sign({ userId }, JWT_SECRET, 'HS256');
         return c.json({ token, user: { id: userId, username } });
     } catch (err) {
         if (err.message.includes('UNIQUE constraint failed')) {
@@ -42,7 +42,7 @@ auth.post('/login', async (c) => {
         return c.json({ error: 'Invalid username or password' }, 401);
     }
 
-    const token = await sign({ userId: user.id }, JWT_SECRET);
+    const token = await sign({ userId: user.id }, JWT_SECRET, 'HS256');
     return c.json({ token, user: { id: user.id, username: user.username } });
 });
 

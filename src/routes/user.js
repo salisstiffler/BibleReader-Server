@@ -61,7 +61,12 @@ user.post('/sync-progress', async (c) => {
                 VALUES (?, ?, ?, ?)
                 ON CONFLICT(user_id) DO UPDATE SET
                     book_index=excluded.book_index, chapter_index=excluded.chapter_index, verse_num=excluded.verse_num
-            `).bind(userId, progress.bookIndex, progress.chapterIndex, progress.verseNum).run();
+            `).bind(
+                userId,
+                progress.bookIndex ?? null,
+                progress.chapterIndex ?? null,
+                progress.verseNum ?? null
+            ).run();
         }
         return c.json({ success: true });
     } catch (err) {
@@ -87,9 +92,19 @@ user.post('/sync-settings', async (c) => {
                     page_turn_effect=excluded.page_turn_effect, continuous_reading=excluded.continuous_reading,
                     playback_rate=excluded.playback_rate, pause_on_manual_switch=excluded.pause_on_manual_switch, loop_count=excluded.loop_count
             `).bind(
-                userId, settings.theme, settings.language, settings.fontSize, settings.lineHeight, settings.fontFamily,
-                settings.customTheme, settings.accentColor, settings.pageTurnEffect, settings.continuousReading ? 1 : 0,
-                settings.playbackRate, settings.pauseOnManualSwitch ? 1 : 0, settings.loopCount
+                userId,
+                settings.theme ?? null,
+                settings.language ?? null,
+                settings.fontSize ?? null,
+                settings.lineHeight ?? null,
+                settings.fontFamily ?? null,
+                settings.customTheme ?? null,
+                settings.accentColor ?? null,
+                settings.pageTurnEffect ?? null,
+                settings.continuousReading ? 1 : 0,
+                settings.playbackRate ?? null,
+                settings.pauseOnManualSwitch ? 1 : 0,
+                settings.loopCount ?? null
             ).run();
         }
         return c.json({ success: true });
@@ -107,7 +122,14 @@ user.post('/bookmark/add', async (c) => {
 
     try {
         await db.prepare('INSERT OR REPLACE INTO bookmarks (id, user_id, book_id, chapter, start_verse, end_verse) VALUES (?, ?, ?, ?, ?, ?)')
-            .bind(id, userId, bookId, chapter, startVerse, endVerse).run();
+            .bind(
+                id ?? null,
+                userId,
+                bookId ?? null,
+                chapter ?? null,
+                startVerse ?? null,
+                endVerse ?? null
+            ).run();
         return c.json({ success: true });
     } catch (err) {
         console.error(err);
@@ -138,7 +160,15 @@ user.post('/highlight/set', async (c) => {
 
     try {
         await db.prepare('INSERT OR REPLACE INTO highlights (id, user_id, book_id, chapter, start_verse, end_verse, color) VALUES (?, ?, ?, ?, ?, ?, ?)')
-            .bind(id, userId, bookId, chapter, startVerse, endVerse, color).run();
+            .bind(
+                id ?? null,
+                userId,
+                bookId ?? null,
+                chapter ?? null,
+                startVerse ?? null,
+                endVerse ?? null,
+                color ?? null
+            ).run();
         return c.json({ success: true });
     } catch (err) {
         console.error(err);
@@ -170,7 +200,15 @@ user.post('/note/save', async (c) => {
     try {
         if (text && text.trim()) {
             await db.prepare('INSERT OR REPLACE INTO notes (id, user_id, book_id, chapter, start_verse, end_verse, text) VALUES (?, ?, ?, ?, ?, ?, ?)')
-                .bind(id, userId, bookId, chapter, startVerse, endVerse, text).run();
+                .bind(
+                    id ?? null,
+                    userId,
+                    bookId ?? null,
+                    chapter ?? null,
+                    startVerse ?? null,
+                    endVerse ?? null,
+                    text ?? null
+                ).run();
         } else {
             await db.prepare('DELETE FROM notes WHERE id = ? AND user_id = ?').bind(id, userId).run();
         }

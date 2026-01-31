@@ -1,0 +1,14 @@
+#:schema node_modules/wrangler/config-schema.json
+name = "holy-server"
+main = "src/worker.js"
+compatibility_date = "2026-01-31"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "holy-db"
+database_id = "b8b2a2ac-af79-4ebc-92b4-ad5f6a7931fb"
+
+[vars]
+JWT_SECRET = "your-secret-key-change-me"
+

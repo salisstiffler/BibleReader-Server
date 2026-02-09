@@ -3,6 +3,7 @@ import { cors } from 'hono/cors';
 import { jwt } from 'hono/jwt';
 import authRoutes from './routes/auth';
 import userRoutes from './routes/user';
+import adminRoutes from './routes/admin';
 
 const app = new Hono();
 
@@ -14,6 +15,8 @@ app.get('/health', (c) => c.json({ status: 'ok' }));
 
 // Auth routes (unprotected)
 app.route('/api/auth', authRoutes);
+app.route('/api/admin', adminRoutes);
+
 
 // Protected routes middleware
 app.use('/api/user/*', async (c, next) => {

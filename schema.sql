@@ -62,3 +62,22 @@ CREATE TABLE IF NOT EXISTS notes (
     text TEXT,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
+CREATE TABLE IF NOT EXISTS admins (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS app_versions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    platform TEXT NOT NULL,
+    version_code INTEGER NOT NULL,
+    version_name TEXT NOT NULL,
+    update_info TEXT,
+    file_url TEXT NOT NULL,
+    file_path TEXT,
+    signature_hash TEXT,
+    is_force_update BOOLEAN DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);

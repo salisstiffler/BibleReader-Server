@@ -4,6 +4,7 @@ import { jwt } from 'hono/jwt';
 import authRoutes from './routes/auth';
 import userRoutes from './routes/user';
 import adminRoutes from './routes/admin';
+import updateRoutes from './routes/update';
 
 const app = new Hono();
 
@@ -16,6 +17,8 @@ app.get('/health', (c) => c.json({ status: 'ok' }));
 // Auth routes (unprotected)
 app.route('/api/auth', authRoutes);
 app.route('/api/admin', adminRoutes);
+app.route('/api/update', updateRoutes);
+
 
 
 // Protected routes middleware

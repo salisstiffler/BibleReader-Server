@@ -68,6 +68,34 @@ db.exec(`
         text TEXT,
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS app_versions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        platform TEXT NOT NULL,
+        version_code INTEGER,
+        version_name TEXT,
+        update_info TEXT,
+        file_url TEXT,
+        file_path TEXT,
+        signature_hash TEXT,
+        is_force_update BOOLEAN DEFAULT 0,
+        release_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS admins (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
 `);
+
+// Initialize default admin
+const bcrypt = require('bcryptjs');
+const admin = db.prepare('SELECT * FROM admins WHERE username = ?').get('admin');
+if (!admin) {
+    const hash = bcrypt.hashSync('123456', 10);
+    db.prepare('INSERT INTO admins (username, password_hash) VALUES (?, ?)').run('admin', hash);
+}
 
 module.exports = db;

@@ -3,7 +3,27 @@ const router = express.Router();
 const db = require('../db');
 const auth = require('../middleware/auth');
 
-// Get full profile (Settings, Progress, Bookmarks, Highlights, Notes)
+/**
+ * @swagger
+ * tags:
+ *   name: User
+ *   description: User profiles, settings, and sync
+ */
+
+/**
+ * @swagger
+ * /api/user/profile:
+ *   get:
+ *     summary: Get user profile
+ *     tags: [User]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Full profile data
+ *       401:
+ *         description: Unauthorized
+ */
 router.get('/profile', auth, (req, res) => {
     const userId = req.userId;
 
@@ -49,6 +69,27 @@ router.get('/profile', auth, (req, res) => {
     });
 });
 
+/**
+ * @swagger
+ * /api/user/sync-progress:
+ *   post:
+ *     summary: Sync reading progress only
+ *     tags: [User]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               progress:
+ *                 type: object
+ *     responses:
+ *       200:
+ *         description: Progress synced
+ */
 // Sync settings and progress only (called periodically for reading progress)
 router.post('/sync-progress', auth, (req, res) => {
     const userId = req.userId;
@@ -70,6 +111,27 @@ router.post('/sync-progress', auth, (req, res) => {
     }
 });
 
+/**
+ * @swagger
+ * /api/user/sync-settings:
+ *   post:
+ *     summary: Sync user settings only
+ *     tags: [User]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               settings:
+ *                 type: object
+ *     responses:
+ *       200:
+ *         description: Settings synced
+ */
 // Sync settings only
 router.post('/sync-settings', auth, (req, res) => {
     const userId = req.userId;
@@ -98,6 +160,35 @@ router.post('/sync-settings', auth, (req, res) => {
     }
 });
 
+/**
+ * @swagger
+ * /api/user/bookmark/add:
+ *   post:
+ *     summary: Add or update a bookmark
+ *     tags: [User]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               id:
+ *                 type: string
+ *               bookId:
+ *                 type: string
+ *               chapter:
+ *                 type: integer
+ *               startVerse:
+ *                 type: integer
+ *               endVerse:
+ *                 type: integer
+ *     responses:
+ *       200:
+ *         description: Bookmark added
+ */
 // Add bookmark
 router.post('/bookmark/add', auth, (req, res) => {
     const userId = req.userId;
@@ -113,6 +204,27 @@ router.post('/bookmark/add', auth, (req, res) => {
     }
 });
 
+/**
+ * @swagger
+ * /api/user/bookmark/remove:
+ *   post:
+ *     summary: Remove a bookmark
+ *     tags: [User]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               id:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Bookmark removed
+ */
 // Remove bookmark
 router.post('/bookmark/remove', auth, (req, res) => {
     const userId = req.userId;
@@ -127,6 +239,37 @@ router.post('/bookmark/remove', auth, (req, res) => {
     }
 });
 
+/**
+ * @swagger
+ * /api/user/highlight/set:
+ *   post:
+ *     summary: Add or update a highlight
+ *     tags: [User]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               id:
+ *                 type: string
+ *               bookId:
+ *                 type: string
+ *               chapter:
+ *                 type: integer
+ *               startVerse:
+ *                 type: integer
+ *               endVerse:
+ *                 type: integer
+ *               color:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Highlight set
+ */
 // Add/Update highlight
 router.post('/highlight/set', auth, (req, res) => {
     const userId = req.userId;
@@ -142,6 +285,27 @@ router.post('/highlight/set', auth, (req, res) => {
     }
 });
 
+/**
+ * @swagger
+ * /api/user/highlight/remove:
+ *   post:
+ *     summary: Remove a highlight
+ *     tags: [User]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               id:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Highlight removed
+ */
 // Remove highlight
 router.post('/highlight/remove', auth, (req, res) => {
     const userId = req.userId;
@@ -156,6 +320,37 @@ router.post('/highlight/remove', auth, (req, res) => {
     }
 });
 
+/**
+ * @swagger
+ * /api/user/note/save:
+ *   post:
+ *     summary: Add or update a note
+ *     tags: [User]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               id:
+ *                 type: string
+ *               bookId:
+ *                 type: string
+ *               chapter:
+ *                 type: integer
+ *               startVerse:
+ *                 type: integer
+ *               endVerse:
+ *                 type: integer
+ *               text:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Note saved
+ */
 // Add/Update note
 router.post('/note/save', auth, (req, res) => {
     const userId = req.userId;
@@ -176,6 +371,27 @@ router.post('/note/save', auth, (req, res) => {
     }
 });
 
+/**
+ * @swagger
+ * /api/user/note/remove:
+ *   post:
+ *     summary: Remove a note
+ *     tags: [User]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               id:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Note removed
+ */
 // Remove note
 router.post('/note/remove', auth, (req, res) => {
     const userId = req.userId;
@@ -190,7 +406,34 @@ router.post('/note/remove', auth, (req, res) => {
     }
 });
 
-// Sync data (Batch update) - Keep for initial sync or full sync
+/**
+ * @swagger
+ * /api/user/sync:
+ *   post:
+ *     summary: Batch sync user data
+ *     tags: [User]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               settings:
+ *                 type: object
+ *               progress:
+ *                 type: object
+ *               bookmarks:
+ *                 type: array
+ *               highlights:
+ *                 type: array
+ *               notes:
+ *                 type: array
+ *     responses:
+ *       200:
+ *         description: Sync successful
+ */
 router.post('/sync', auth, (req, res) => {
     const userId = req.userId;
     const { settings, progress, bookmarks, highlights, notes } = req.body;
@@ -223,8 +466,7 @@ router.post('/sync', auth, (req, res) => {
             `).run(userId, progress.bookIndex, progress.chapterIndex, progress.verseNum);
         }
 
-        // Sync Bookmarks (Delete all and re-insert for simplicity or diff)
-        // Let's do a simple replace all for this user
+        // Sync Bookmarks
         db.prepare('DELETE FROM bookmarks WHERE user_id = ?').run(userId);
         if (bookmarks && bookmarks.length > 0) {
             const insert = db.prepare('INSERT INTO bookmarks (id, user_id, book_id, chapter, start_verse, end_verse) VALUES (?, ?, ?, ?, ?, ?)');

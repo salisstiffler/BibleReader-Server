@@ -1,101 +1,49 @@
-const express = require('express');
-const router = express.Router();
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const db = require('../db');
+import { Hono } from 'hono';
+import { sign } from 'hono/jwt';
+import bcrypt from 'bcryptjs';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'secret_key';
+const auth = new Hono();
 
-/**
- * @swagger
- * tags:
- *   name: Auth
- *   description: User authentication and registration
- */
-
-/**
- * @swagger
- * /api/auth/register:
- *   post:
- *     summary: Register a new user
- *     tags: [Auth]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - username
- *               - password
- *             properties:
- *               username:
- *                 type: string
- *               password:
- *                 type: string
- *     responses:
- *       200:
- *         description: User registered successfully
- *       400:
- *         description: Missing fields or username exists
- */
-router.post('/register', async (req, res) => {
-    const { username, password } = req.body;
+// Register
+auth.post('/register', async (c) => {
+    const { username, password } = await c.req.json();
     if (!username || !password) {
-        return res.status(400).json({ error: 'Username and password required' });
+        return c.json({ error: 'Username and password required' }, 400);
     }
+
+    const db = c.env.DB;
+    const JWT_SECRET = c.env.JWT_SECRET || 'secret_key';
 
     try {
         const password_hash = await bcrypt.hash(password, 10);
-        const info = db.prepare('INSERT INTO users (username, password_hash) VALUES (?, ?)').run(username, password_hash);
-        const userId = info.lastInsertRowid;
+        const info = await db.prepare('INSERT INTO users (username, password_hash) VALUES (?, ?)').bind(username, password_hash).run();
+        const userId = info.meta.last_row_id;
 
-        const token = jwt.sign({ userId }, JWT_SECRET, { expiresIn: '30d' });
-        res.json({ token, user: { id: userId, username } });
+        const token = await sign({ userId }, JWT_SECRET, 'HS256');
+        return c.json({ token, user: { id: userId, username } });
     } catch (err) {
         if (err.message.includes('UNIQUE constraint failed')) {
-            return res.status(400).json({ error: 'Username already exists' });
+            return c.json({ error: 'Username already exists' }, 400);
         }
-        res.status(500).json({ error: 'Internal server error' });
+        console.error(err);
+        return c.json({ error: 'Internal server error' }, 500);
     }
 });
 
-/**
- * @swagger
- * /api/auth/login:
- *   post:
- *     summary: User login
- *     tags: [Auth]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - username
- *               - password
- *             properties:
- *               username:
- *                 type: string
- *               password:
- *                 type: string
- *     responses:
- *       200:
- *         description: Login successful
- *       401:
- *         description: Invalid credentials
- */
-router.post('/login', async (req, res) => {
-    const { username, password } = req.body;
-    const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
+// Login
+auth.post('/login', async (c) => {
+    const { username, password } = await c.req.json();
+    const db = c.env.DB;
+    const JWT_SECRET = c.env.JWT_SECRET || 'secret_key';
+
+    const user = await db.prepare('SELECT * FROM users WHERE username = ?').bind(username).first();
 
     if (!user || !(await bcrypt.compare(password, user.password_hash))) {
-        return res.status(401).json({ error: 'Invalid username or password' });
+        return c.json({ error: 'Invalid username or password' }, 401);
     }
 
-    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '30d' });
-    res.json({ token, user: { id: user.id, username: user.username } });
+    const token = await sign({ userId: user.id }, JWT_SECRET, 'HS256');
+    return c.json({ token, user: { id: user.id, username: user.username } });
 });
 
-module.exports = router;
+export default auth;

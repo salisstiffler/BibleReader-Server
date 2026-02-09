@@ -1,57 +1,33 @@
-const express = require('express');
-const router = express.Router();
-const db = require('../db');
+import { Hono } from 'hono';
 
-/**
- * @swagger
- * tags:
- *   name: Update
- *   description: App version check and update services
- */
+const update = new Hono();
 
-/**
- * @swagger
- * /api/update/check:
- *   get:
- *     summary: Check for app updates
- *     tags: [Update]
- *     parameters:
- *       - in: query
- *         name: platform
- *         required: true
- *         schema:
- *           type: string
- *       - in: query
- *         name: currentVersionCode
- *         schema:
- *           type: integer
- *     responses:
- *       200:
- *         description: Update information
- */
-router.get('/check', (req, res) => {
-    const { platform, currentVersionCode } = req.query;
+update.get('/check', async (c) => {
+    const platform = c.req.query('platform');
+    const currentVersionCode = c.req.query('currentVersionCode');
 
     if (!platform) {
-        return res.status(400).json({ error: 'Platform is required' });
+        return c.json({ error: 'Platform is required' }, 400);
     }
 
+    const db = c.env.DB;
+
     try {
-        const latest = db.prepare(`
+        const latest = await db.prepare(`
             SELECT * FROM app_versions 
             WHERE platform = ? 
             ORDER BY version_code DESC, created_at DESC 
             LIMIT 1
-        `).get(platform);
+        `).bind(platform).first();
 
         if (!latest) {
-            return res.json({ update: false });
+            return c.json({ update: false });
         }
 
         const currentCode = parseInt(currentVersionCode) || 0;
         const hasUpdate = latest.version_code > currentCode;
 
-        res.json({
+        return c.json({
             update: hasUpdate,
             versionName: latest.version_name,
             versionCode: latest.version_code,
@@ -61,8 +37,8 @@ router.get('/check', (req, res) => {
             releaseDate: latest.release_date
         });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        return c.json({ error: err.message }, 500);
     }
 });
 
-module.exports = router;
+export default update;

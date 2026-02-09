@@ -1,39 +1,18 @@
-const express = require('express');
-const router = express.Router();
-const db = require('../db');
-const auth = require('../middleware/auth');
+import { Hono } from 'hono';
 
-/**
- * @swagger
- * tags:
- *   name: User
- *   description: User profiles, settings, and sync
- */
+const user = new Hono();
 
-/**
- * @swagger
- * /api/user/profile:
- *   get:
- *     summary: Get user profile
- *     tags: [User]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Full profile data
- *       401:
- *         description: Unauthorized
- */
-router.get('/profile', auth, (req, res) => {
-    const userId = req.userId;
+// Get full profile
+user.get('/profile', async (c) => {
+    const userId = c.get('userId');
+    const db = c.env.DB;
 
-    const settings = db.prepare('SELECT * FROM settings WHERE user_id = ?').get(userId);
-    const progress = db.prepare('SELECT * FROM progress WHERE user_id = ?').get(userId);
-    const bookmarksRaw = db.prepare('SELECT * FROM bookmarks WHERE user_id = ?').all(userId);
-    const highlightsRaw = db.prepare('SELECT * FROM highlights WHERE user_id = ?').all(userId);
-    const notesRaw = db.prepare('SELECT * FROM notes WHERE user_id = ?').all(userId);
+    const settings = await db.prepare('SELECT * FROM settings WHERE user_id = ?').bind(userId).first();
+    const progress = await db.prepare('SELECT * FROM progress WHERE user_id = ?').bind(userId).first();
+    const { results: bookmarksRaw } = await db.prepare('SELECT * FROM bookmarks WHERE user_id = ?').bind(userId).all();
+    const { results: highlightsRaw } = await db.prepare('SELECT * FROM highlights WHERE user_id = ?').bind(userId).all();
+    const { results: notesRaw } = await db.prepare('SELECT * FROM notes WHERE user_id = ?').bind(userId).all();
 
-    // Convert snake_case to camelCase for frontend
     const bookmarks = bookmarksRaw.map(b => ({
         id: b.id,
         bookId: b.book_id,
@@ -60,7 +39,7 @@ router.get('/profile', auth, (req, res) => {
         text: n.text
     }));
 
-    res.json({
+    return c.json({
         settings: settings || null,
         progress: progress || null,
         bookmarks,
@@ -69,77 +48,42 @@ router.get('/profile', auth, (req, res) => {
     });
 });
 
-/**
- * @swagger
- * /api/user/sync-progress:
- *   post:
- *     summary: Sync reading progress only
- *     tags: [User]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               progress:
- *                 type: object
- *     responses:
- *       200:
- *         description: Progress synced
- */
-// Sync settings and progress only (called periodically for reading progress)
-router.post('/sync-progress', auth, (req, res) => {
-    const userId = req.userId;
-    const { progress } = req.body;
+// Sync progress
+user.post('/sync-progress', async (c) => {
+    const userId = c.get('userId');
+    const { progress } = await c.req.json();
+    const db = c.env.DB;
 
     try {
         if (progress) {
-            db.prepare(`
+            await db.prepare(`
                 INSERT INTO progress (user_id, book_index, chapter_index, verse_num)
                 VALUES (?, ?, ?, ?)
                 ON CONFLICT(user_id) DO UPDATE SET
                     book_index=excluded.book_index, chapter_index=excluded.chapter_index, verse_num=excluded.verse_num
-            `).run(userId, progress.bookIndex, progress.chapterIndex, progress.verseNum);
+            `).bind(
+                userId,
+                progress.bookIndex ?? null,
+                progress.chapterIndex ?? null,
+                progress.verseNum ?? null
+            ).run();
         }
-        res.json({ success: true });
+        return c.json({ success: true });
     } catch (err) {
         console.error(err);
-        res.status(500).json({ error: 'Progress sync failed' });
+        return c.json({ error: 'Progress sync failed' }, 500);
     }
 });
 
-/**
- * @swagger
- * /api/user/sync-settings:
- *   post:
- *     summary: Sync user settings only
- *     tags: [User]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               settings:
- *                 type: object
- *     responses:
- *       200:
- *         description: Settings synced
- */
-// Sync settings only
-router.post('/sync-settings', auth, (req, res) => {
-    const userId = req.userId;
-    const { settings } = req.body;
+// Sync settings
+user.post('/sync-settings', async (c) => {
+    const userId = c.get('userId');
+    const { settings } = await c.req.json();
+    const db = c.env.DB;
 
     try {
         if (settings) {
-            db.prepare(`
+            await db.prepare(`
                 INSERT INTO settings (user_id, theme, language, font_size, line_height, font_family, custom_theme, accent_color, page_turn_effect, continuous_reading, playback_rate, pause_on_manual_switch, loop_count)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(user_id) DO UPDATE SET
@@ -147,360 +91,212 @@ router.post('/sync-settings', auth, (req, res) => {
                     font_family=excluded.font_family, custom_theme=excluded.custom_theme, accent_color=excluded.accent_color,
                     page_turn_effect=excluded.page_turn_effect, continuous_reading=excluded.continuous_reading,
                     playback_rate=excluded.playback_rate, pause_on_manual_switch=excluded.pause_on_manual_switch, loop_count=excluded.loop_count
-            `).run(
-                userId, settings.theme, settings.language, settings.fontSize, settings.lineHeight, settings.fontFamily,
-                settings.customTheme, settings.accentColor, settings.pageTurnEffect, settings.continuousReading ? 1 : 0,
-                settings.playbackRate, settings.pauseOnManualSwitch ? 1 : 0, settings.loopCount
-            );
+            `).bind(
+                userId,
+                settings.theme ?? null,
+                settings.language ?? null,
+                settings.fontSize ?? null,
+                settings.lineHeight ?? null,
+                settings.fontFamily ?? null,
+                settings.customTheme ?? null,
+                settings.accentColor ?? null,
+                settings.pageTurnEffect ?? null,
+                settings.continuousReading ? 1 : 0,
+                settings.playbackRate ?? null,
+                settings.pauseOnManualSwitch ? 1 : 0,
+                settings.loopCount ?? null
+            ).run();
         }
-        res.json({ success: true });
+        return c.json({ success: true });
     } catch (err) {
         console.error(err);
-        res.status(500).json({ error: 'Settings sync failed' });
+        return c.json({ error: 'Settings sync failed' }, 500);
     }
 });
 
-/**
- * @swagger
- * /api/user/bookmark/add:
- *   post:
- *     summary: Add or update a bookmark
- *     tags: [User]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               id:
- *                 type: string
- *               bookId:
- *                 type: string
- *               chapter:
- *                 type: integer
- *               startVerse:
- *                 type: integer
- *               endVerse:
- *                 type: integer
- *     responses:
- *       200:
- *         description: Bookmark added
- */
 // Add bookmark
-router.post('/bookmark/add', auth, (req, res) => {
-    const userId = req.userId;
-    const { id, bookId, chapter, startVerse, endVerse } = req.body;
+user.post('/bookmark/add', async (c) => {
+    const userId = c.get('userId');
+    const { id, bookId, chapter, startVerse, endVerse } = await c.req.json();
+    const db = c.env.DB;
 
     try {
-        db.prepare('INSERT OR REPLACE INTO bookmarks (id, user_id, book_id, chapter, start_verse, end_verse) VALUES (?, ?, ?, ?, ?, ?)')
-            .run(id, userId, bookId, chapter, startVerse, endVerse);
-        res.json({ success: true });
+        await db.prepare('INSERT OR REPLACE INTO bookmarks (id, user_id, book_id, chapter, start_verse, end_verse) VALUES (?, ?, ?, ?, ?, ?)')
+            .bind(
+                id ?? null,
+                userId,
+                bookId ?? null,
+                chapter ?? null,
+                startVerse ?? null,
+                endVerse ?? null
+            ).run();
+        return c.json({ success: true });
     } catch (err) {
         console.error(err);
-        res.status(500).json({ error: 'Failed to add bookmark' });
+        return c.json({ error: 'Failed to add bookmark' }, 500);
     }
 });
 
-/**
- * @swagger
- * /api/user/bookmark/remove:
- *   post:
- *     summary: Remove a bookmark
- *     tags: [User]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               id:
- *                 type: string
- *     responses:
- *       200:
- *         description: Bookmark removed
- */
 // Remove bookmark
-router.post('/bookmark/remove', auth, (req, res) => {
-    const userId = req.userId;
-    const { id } = req.body;
+user.post('/bookmark/remove', async (c) => {
+    const userId = c.get('userId');
+    const { id } = await c.req.json();
+    const db = c.env.DB;
 
     try {
-        db.prepare('DELETE FROM bookmarks WHERE id = ? AND user_id = ?').run(id, userId);
-        res.json({ success: true });
+        await db.prepare('DELETE FROM bookmarks WHERE id = ? AND user_id = ?').bind(id, userId).run();
+        return c.json({ success: true });
     } catch (err) {
         console.error(err);
-        res.status(500).json({ error: 'Failed to remove bookmark' });
+        return c.json({ error: 'Failed to remove bookmark' }, 500);
     }
 });
 
-/**
- * @swagger
- * /api/user/highlight/set:
- *   post:
- *     summary: Add or update a highlight
- *     tags: [User]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               id:
- *                 type: string
- *               bookId:
- *                 type: string
- *               chapter:
- *                 type: integer
- *               startVerse:
- *                 type: integer
- *               endVerse:
- *                 type: integer
- *               color:
- *                 type: string
- *     responses:
- *       200:
- *         description: Highlight set
- */
 // Add/Update highlight
-router.post('/highlight/set', auth, (req, res) => {
-    const userId = req.userId;
-    const { id, bookId, chapter, startVerse, endVerse, color } = req.body;
+user.post('/highlight/set', async (c) => {
+    const userId = c.get('userId');
+    const { id, bookId, chapter, startVerse, endVerse, color } = await c.req.json();
+    const db = c.env.DB;
 
     try {
-        db.prepare('INSERT OR REPLACE INTO highlights (id, user_id, book_id, chapter, start_verse, end_verse, color) VALUES (?, ?, ?, ?, ?, ?, ?)')
-            .run(id, userId, bookId, chapter, startVerse, endVerse, color);
-        res.json({ success: true });
+        await db.prepare('INSERT OR REPLACE INTO highlights (id, user_id, book_id, chapter, start_verse, end_verse, color) VALUES (?, ?, ?, ?, ?, ?, ?)')
+            .bind(
+                id ?? null,
+                userId,
+                bookId ?? null,
+                chapter ?? null,
+                startVerse ?? null,
+                endVerse ?? null,
+                color ?? null
+            ).run();
+        return c.json({ success: true });
     } catch (err) {
         console.error(err);
-        res.status(500).json({ error: 'Failed to set highlight' });
+        return c.json({ error: 'Failed to set highlight' }, 500);
     }
 });
 
-/**
- * @swagger
- * /api/user/highlight/remove:
- *   post:
- *     summary: Remove a highlight
- *     tags: [User]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               id:
- *                 type: string
- *     responses:
- *       200:
- *         description: Highlight removed
- */
 // Remove highlight
-router.post('/highlight/remove', auth, (req, res) => {
-    const userId = req.userId;
-    const { id } = req.body;
+user.post('/highlight/remove', async (c) => {
+    const userId = c.get('userId');
+    const { id } = await c.req.json();
+    const db = c.env.DB;
 
     try {
-        db.prepare('DELETE FROM highlights WHERE id = ? AND user_id = ?').run(id, userId);
-        res.json({ success: true });
+        await db.prepare('DELETE FROM highlights WHERE id = ? AND user_id = ?').bind(id, userId).run();
+        return c.json({ success: true });
     } catch (err) {
         console.error(err);
-        res.status(500).json({ error: 'Failed to remove highlight' });
+        return c.json({ error: 'Failed to remove highlight' }, 500);
     }
 });
 
-/**
- * @swagger
- * /api/user/note/save:
- *   post:
- *     summary: Add or update a note
- *     tags: [User]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               id:
- *                 type: string
- *               bookId:
- *                 type: string
- *               chapter:
- *                 type: integer
- *               startVerse:
- *                 type: integer
- *               endVerse:
- *                 type: integer
- *               text:
- *                 type: string
- *     responses:
- *       200:
- *         description: Note saved
- */
 // Add/Update note
-router.post('/note/save', auth, (req, res) => {
-    const userId = req.userId;
-    const { id, bookId, chapter, startVerse, endVerse, text } = req.body;
+user.post('/note/save', async (c) => {
+    const userId = c.get('userId');
+    const { id, bookId, chapter, startVerse, endVerse, text } = await c.req.json();
+    const db = c.env.DB;
 
     try {
         if (text && text.trim()) {
-            db.prepare('INSERT OR REPLACE INTO notes (id, user_id, book_id, chapter, start_verse, end_verse, text) VALUES (?, ?, ?, ?, ?, ?, ?)')
-                .run(id, userId, bookId, chapter, startVerse, endVerse, text);
+            await db.prepare('INSERT OR REPLACE INTO notes (id, user_id, book_id, chapter, start_verse, end_verse, text) VALUES (?, ?, ?, ?, ?, ?, ?)')
+                .bind(
+                    id ?? null,
+                    userId,
+                    bookId ?? null,
+                    chapter ?? null,
+                    startVerse ?? null,
+                    endVerse ?? null,
+                    text ?? null
+                ).run();
         } else {
-            // If text is empty, delete the note
-            db.prepare('DELETE FROM notes WHERE id = ? AND user_id = ?').run(id, userId);
+            await db.prepare('DELETE FROM notes WHERE id = ? AND user_id = ?').bind(id, userId).run();
         }
-        res.json({ success: true });
+        return c.json({ success: true });
     } catch (err) {
         console.error(err);
-        res.status(500).json({ error: 'Failed to save note' });
+        return c.json({ error: 'Failed to save note' }, 500);
     }
 });
 
-/**
- * @swagger
- * /api/user/note/remove:
- *   post:
- *     summary: Remove a note
- *     tags: [User]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               id:
- *                 type: string
- *     responses:
- *       200:
- *         description: Note removed
- */
 // Remove note
-router.post('/note/remove', auth, (req, res) => {
-    const userId = req.userId;
-    const { id } = req.body;
+user.post('/note/remove', async (c) => {
+    const userId = c.get('userId');
+    const { id } = await c.req.json();
+    const db = c.env.DB;
 
     try {
-        db.prepare('DELETE FROM notes WHERE id = ? AND user_id = ?').run(id, userId);
-        res.json({ success: true });
+        await db.prepare('DELETE FROM notes WHERE id = ? AND user_id = ?').bind(id, userId).run();
+        return c.json({ success: true });
     } catch (err) {
         console.error(err);
-        res.status(500).json({ error: 'Failed to remove note' });
+        return c.json({ error: 'Failed to remove note' }, 500);
     }
 });
 
-/**
- * @swagger
- * /api/user/sync:
- *   post:
- *     summary: Batch sync user data
- *     tags: [User]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               settings:
- *                 type: object
- *               progress:
- *                 type: object
- *               bookmarks:
- *                 type: array
- *               highlights:
- *                 type: array
- *               notes:
- *                 type: array
- *     responses:
- *       200:
- *         description: Sync successful
- */
-router.post('/sync', auth, (req, res) => {
-    const userId = req.userId;
-    const { settings, progress, bookmarks, highlights, notes } = req.body;
+// Sync data (Batch update)
+user.post('/sync', async (c) => {
+    const userId = c.get('userId');
+    const { settings, progress, bookmarks, highlights, notes } = await c.req.json();
+    const db = c.env.DB;
 
-    const transaction = db.transaction(() => {
-        // Sync Settings
-        if (settings) {
-            db.prepare(`
-                INSERT INTO settings (user_id, theme, language, font_size, line_height, font_family, custom_theme, accent_color, page_turn_effect, continuous_reading, playback_rate, pause_on_manual_switch, loop_count)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(user_id) DO UPDATE SET
-                    theme=excluded.theme, language=excluded.language, font_size=excluded.font_size, line_height=excluded.line_height,
-                    font_family=excluded.font_family, custom_theme=excluded.custom_theme, accent_color=excluded.accent_color,
-                    page_turn_effect=excluded.page_turn_effect, continuous_reading=excluded.continuous_reading,
-                    playback_rate=excluded.playback_rate, pause_on_manual_switch=excluded.pause_on_manual_switch, loop_count=excluded.loop_count
-            `).run(
-                userId, settings.theme, settings.language, settings.fontSize, settings.lineHeight, settings.fontFamily,
-                settings.customTheme, settings.accentColor, settings.pageTurnEffect, settings.continuousReading ? 1 : 0,
-                settings.playbackRate, settings.pauseOnManualSwitch ? 1 : 0, settings.loopCount
-            );
-        }
+    // Cloudflare D1 batching
+    const batch = [];
 
-        // Sync Progress
-        if (progress) {
-            db.prepare(`
-                INSERT INTO progress (user_id, book_index, chapter_index, verse_num)
-                VALUES (?, ?, ?, ?)
-                ON CONFLICT(user_id) DO UPDATE SET
-                    book_index=excluded.book_index, chapter_index=excluded.chapter_index, verse_num=excluded.verse_num
-            `).run(userId, progress.bookIndex, progress.chapterIndex, progress.verseNum);
-        }
+    if (settings) {
+        batch.push(db.prepare(`
+            INSERT INTO settings (user_id, theme, language, font_size, line_height, font_family, custom_theme, accent_color, page_turn_effect, continuous_reading, playback_rate, pause_on_manual_switch, loop_count)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+                theme=excluded.theme, language=excluded.language, font_size=excluded.font_size, line_height=excluded.line_height,
+                font_family=excluded.font_family, custom_theme=excluded.custom_theme, accent_color=excluded.accent_color,
+                page_turn_effect=excluded.page_turn_effect, continuous_reading=excluded.continuous_reading,
+                playback_rate=excluded.playback_rate, pause_on_manual_switch=excluded.pause_on_manual_switch, loop_count=excluded.loop_count
+        `).bind(
+            userId, settings.theme, settings.language, settings.fontSize, settings.lineHeight, settings.fontFamily,
+            settings.customTheme, settings.accentColor, settings.pageTurnEffect, settings.continuousReading ? 1 : 0,
+            settings.playbackRate, settings.pauseOnManualSwitch ? 1 : 0, settings.loopCount
+        ));
+    }
 
-        // Sync Bookmarks
-        db.prepare('DELETE FROM bookmarks WHERE user_id = ?').run(userId);
-        if (bookmarks && bookmarks.length > 0) {
-            const insert = db.prepare('INSERT INTO bookmarks (id, user_id, book_id, chapter, start_verse, end_verse) VALUES (?, ?, ?, ?, ?, ?)');
-            for (const b of bookmarks) {
-                insert.run(b.id, userId, b.bookId, b.chapter, b.startVerse, b.endVerse);
-            }
-        }
+    if (progress) {
+        batch.push(db.prepare(`
+            INSERT INTO progress (user_id, book_index, chapter_index, verse_num)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+                book_index=excluded.book_index, chapter_index=excluded.chapter_index, verse_num=excluded.verse_num
+        `).bind(userId, progress.bookIndex, progress.chapterIndex, progress.verseNum));
+    }
 
-        // Sync Highlights
-        db.prepare('DELETE FROM highlights WHERE user_id = ?').run(userId);
-        if (highlights && highlights.length > 0) {
-            const insert = db.prepare('INSERT INTO highlights (id, user_id, book_id, chapter, start_verse, end_verse, color) VALUES (?, ?, ?, ?, ?, ?, ?)');
-            for (const h of highlights) {
-                insert.run(h.id, userId, h.bookId, h.chapter, h.startVerse, h.endVerse, h.color);
-            }
+    // Replace all pattern
+    batch.push(db.prepare('DELETE FROM bookmarks WHERE user_id = ?').bind(userId));
+    if (bookmarks && bookmarks.length > 0) {
+        for (const b of bookmarks) {
+            batch.push(db.prepare('INSERT INTO bookmarks (id, user_id, book_id, chapter, start_verse, end_verse) VALUES (?, ?, ?, ?, ?, ?)').bind(b.id, userId, b.bookId, b.chapter, b.startVerse, b.endVerse));
         }
+    }
 
-        // Sync Notes
-        db.prepare('DELETE FROM notes WHERE user_id = ?').run(userId);
-        if (notes && notes.length > 0) {
-            const insert = db.prepare('INSERT INTO notes (id, user_id, book_id, chapter, start_verse, end_verse, text) VALUES (?, ?, ?, ?, ?, ?, ?)');
-            for (const n of notes) {
-                insert.run(n.id, userId, n.bookId, n.chapter, n.startVerse, n.endVerse, n.text);
-            }
+    batch.push(db.prepare('DELETE FROM highlights WHERE user_id = ?').bind(userId));
+    if (highlights && highlights.length > 0) {
+        for (const h of highlights) {
+            batch.push(db.prepare('INSERT INTO highlights (id, user_id, book_id, chapter, start_verse, end_verse, color) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(h.id, userId, h.bookId, h.chapter, h.startVerse, h.endVerse, h.color));
         }
-    });
+    }
+
+    batch.push(db.prepare('DELETE FROM notes WHERE user_id = ?').bind(userId));
+    if (notes && notes.length > 0) {
+        for (const n of notes) {
+            batch.push(db.prepare('INSERT INTO notes (id, user_id, book_id, chapter, start_verse, end_verse, text) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(n.id, userId, n.bookId, n.chapter, n.startVerse, n.endVerse, n.text));
+        }
+    }
 
     try {
-        transaction();
-        res.json({ success: true });
+        await db.batch(batch);
+        return c.json({ success: true });
     } catch (err) {
         console.error(err);
-        res.status(500).json({ error: 'Sync failed' });
+        return c.json({ error: 'Sync failed' }, 500);
     }
 });
 
-module.exports = router;
+export default user;
